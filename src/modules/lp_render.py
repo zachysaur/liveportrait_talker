@@ -25,19 +25,13 @@ class LivePortraitRender:
         self.live_portrait_wrapper = LivePortraitWrapper(device=device,
                                                          liveportrait_cfg=liveportrait_cfg)
 
-
     def make_motion_template_from_pred(self, pred):
         bs = pred['exp'].shape[0]
-        #pred['pitch'] = headpose_pred_to_degree(pred['pitch'])[:, None] * pitch_weight  # Bx1
-        #pred['yaw'] = headpose_pred_to_degree(pred['yaw'])[:, None] * yaw_weight  # Bx1
-        #pred['roll'] = headpose_pred_to_degree(pred['roll'])[:, None] * roll_weight  # Bx1
         pred['exp'] = pred['exp'].reshape(bs, -1, 3)  # BxNx3
 
-        #R_i = get_rotation_matrix(pred['pitch'], pred['yaw'], pred['roll'])
-        item_dct = {#'R': R_i.to(self.device),
-                    'exp': pred['exp'].to(self.device),
-                    #'t': pred['t'].to(self.device),
-                    }
+        item_dct = {
+            'exp': pred['exp'].to(self.device),
+        }
 
         template_dct = {'motion': item_dct}
         return template_dct
@@ -86,10 +80,10 @@ class LivePortraitRender:
 
             ref_R_list = get_reference_frames(ref_R_list=ref_R_list, n_frames=n_frames, ref_frames_from_zero=ref_frames_from_zero)
 
-        
         x_d_exp_lst_smooth = None
         rendered_frame_list = []
         x_d_i_info = driving_template_dct["motion"]
+
         for i in tqdm(range(n_frames), "Rendering.."):
             if source_type == "video":
                 x_s_i_info, R_s_i, f_s_i, x_s_i = self.predict_source_inputs(rendering_input_face=rendering_input_face[i].unsqueeze(0))
@@ -100,12 +94,20 @@ class LivePortraitRender:
 
             elif source_type == "image" and i == 0:
                 x_s_i_info, R_s_i, f_s_i, x_s_i = self.predict_source_inputs(rendering_input_face=rendering_input_face)
-                #self.instant_save_func(source_type=source_type, source_coeff=source_coeff, source_eye_close_ratio=source_eye_close_ratio, x_s_i_info=x_s_i_info, R_s_i=R_s_i, f_s_i=f_s_i, x_s_i=x_s_i)
 
                 if not still:
+                    # Safeguard the indices for lower and upper lip expressions
+                    exp_shape = driving_template_dct["motion"]["exp"].shape[1]
+                    safe_lip_indices = [idx for idx in [19, 20] if idx < exp_shape]
+
+                    if len(safe_lip_indices) > 0:
+                        lower_upper_lip_expressions = driving_template_dct["motion"]["exp"][:, safe_lip_indices, :]
+                    else:
+                        lower_upper_lip_expressions = None  # or apply default behavior
+
                     if ref_R_list is None:
                         ref_R_list = self.synthetic_headpose_generation(num_frames=n_frames,
-                                                                        lower_upper_lip_expressions=driving_template_dct["motion"]["exp"][:, [19,20], :],
+                                                                        lower_upper_lip_expressions=lower_upper_lip_expressions,
                                                                         source_info=x_s_i_info)
 
                     else:
@@ -127,7 +129,6 @@ class LivePortraitRender:
             t_new[..., 2].fill_(0)
 
             x_d_i_new = scale_new * (x_c_s_i @ R_new + delta_new) + t_new
-
 
             if source_type == "image":
                 combined_eye_ratio_tensor = self.live_portrait_wrapper.calc_combined_eye_ratio(driving_blink_ratio[i], source_eye_close_ratio[i])
