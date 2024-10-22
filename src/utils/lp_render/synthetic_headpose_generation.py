@@ -6,8 +6,9 @@ from scipy.io import loadmat
 
 from src.utils.lp_render.camera import get_rotation_matrix
 
-
 def minmax_normalization(x):
+    if x is None or x.numel() == 0:
+        raise ValueError("Input for minmax_normalization is None or empty.")
     return (x - x.min()) / (x.max() - x.min())
 
 def ease_in_out_sine(t):
@@ -28,7 +29,7 @@ class SyntheticHeadPoseGeneration:
             t = t[:num_frames]
 
         eased_t = ease_in_out_sine(t)
-        weight_list = self.get_lip_based_weight_list(lower_upper_lip_expressions=lower_upper_lip_expressions)
+        weight_list = self.get_lip_based_weight_list(lower_upper_lip_expressions)
 
         pose_hash = {"pitch": None, "yaw": None, "roll": None}
         for pose_name in pose_hash.keys():
@@ -52,15 +53,19 @@ class SyntheticHeadPoseGeneration:
         return smoothed_weight_list
 
     def get_lip_based_weight_list(self, lower_upper_lip_expressions):
+        if lower_upper_lip_expressions is None:
+            print("Warning: lower_upper_lip_expressions is None. Returning a weight list of zeros.")
+            return torch.zeros(1, device=self.device)
+
         normalized_lip_based_exp = minmax_normalization(lower_upper_lip_expressions)
 
         derivative_lip_based_exp = torch.diff(normalized_lip_based_exp, dim=0)
         derivative_lower_lip_values = derivative_lip_based_exp[:, 0].abs().mean(dim=1)
         derivative_upper_lip_values = derivative_lip_based_exp[:, 1].abs().mean(dim=1)
 
-        weight_list = torch.ones(derivative_lip_based_exp.shape[0])
-        weight_list[(derivative_lower_lip_values<self.threshold)&(derivative_upper_lip_values<self.threshold)] = 0
-        weight_list = torch.cat([weight_list, torch.zeros(1)], dim=0)
+        weight_list = torch.ones(derivative_lip_based_exp.shape[0], device=self.device)
+        weight_list[(derivative_lower_lip_values < self.threshold) & (derivative_upper_lip_values < self.threshold)] = 0
+        weight_list = torch.cat([weight_list, torch.zeros(1, device=self.device)], dim=0)
 
         smoothed_weight_list = self.smooth_weight_list(weight_list)
         return smoothed_weight_list
