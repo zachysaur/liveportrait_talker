@@ -1,5 +1,5 @@
 inference:
-  device: mps
+  device: cuda
   fps: 25
   batch_size: 2
   sadtalker_checkpoint_path: ./pretrained_models/sadtalker/SadTalker_V0.0.2_256.safetensors
