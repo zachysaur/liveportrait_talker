@@ -10,7 +10,9 @@ class Map2LivePortrait:
         self.semantic_radius = semantic_radius
 
         self.mapping = MappingNet(**mappingnet_cfg)
-        self.mapping.load_state_dict(torch.load(mappingnet_model_path))
+        
+        # Load the model on the correct device (cuda or cpu)
+        self.mapping.load_state_dict(torch.load(mappingnet_model_path, map_location=device))
         self.mapping.to(self.device)
 
     def __call__(self, batch):
@@ -27,3 +29,4 @@ class Map2LivePortrait:
             target_semantics = transform_semantic_target(predicted_coeffs, frame_idx, self.semantic_radius)
             target_semantics_list.append(target_semantics)
         return torch.stack(target_semantics_list, dim=0)
+
